@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_meteor/src/utils.dart';
 import 'package:rxdart/rxdart.dart';
-import 'ddp_client.dart';
+import 'ddp_client.dart' if (dart.library.js) 'ddp_client_js.dart';
 
 class MeteorClientLoginResult {
   String userId;
