@@ -1,8 +1,11 @@
 import 'package:flutter_meteor/meteor.dart';
 import 'package:flutter/material.dart';
 
-Meteor meteor = Meteor.connect(url: 'http://127.0.0.1:3000');
-void main() => runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Meteor().connect(url: 'http://127.0.0.1:3000');
+  runApp(MyApp());
+}
 
 class MyApp extends StatefulWidget {
   @override
@@ -13,7 +16,7 @@ class _MyAppState extends State<MyApp> {
   String _methodResult = '';
 
   void _callMethod() {
-    meteor.call('helloMethod', []).then((result) {
+    Meteor().call('helloMethod', []).then((result) {
       setState(() {
         _methodResult = result.toString();
       });
@@ -38,7 +41,7 @@ class _MyAppState extends State<MyApp> {
           child: Column(
             children: <Widget>[
               StreamBuilder<DdpConnectionStatus>(
-                stream: meteor.status(),
+                stream: Meteor().status(),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
                     if (snapshot.data.status ==
@@ -46,14 +49,14 @@ class _MyAppState extends State<MyApp> {
                       return RaisedButton(
                         child: Text('Disconnect'),
                         onPressed: () {
-                          meteor.disconnect();
+                          Meteor().disconnect();
                         },
                       );
                     }
                     return RaisedButton(
                       child: Text('Connect'),
                       onPressed: () {
-                        meteor.reconnect();
+                        Meteor().reconnect();
                       },
                     );
                   }
@@ -61,7 +64,7 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               StreamBuilder<DdpConnectionStatus>(
-                stream: meteor.status(),
+                stream: Meteor().status(),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
                     return Text('Meteor Status ${snapshot.data.toString()}');
@@ -70,26 +73,25 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               StreamBuilder(
-                  stream: meteor.userIdStream(),
+                  stream: Meteor().userIdStream(),
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       return RaisedButton(
                         child: Text('Logout'),
                         onPressed: () {
-                          meteor.logout();
+                          Meteor().logout();
                         },
                       );
                     }
                     return RaisedButton(
                       child: Text('Login'),
                       onPressed: () {
-                        meteor.loginWithPassword(
-                            'yourusername', 'yourpassword');
+                        Meteor().loginWithPassword('test', 'test');
                       },
                     );
                   }),
               StreamBuilder(
-                stream: meteor.userStream(),
+                stream: Meteor().userStream(),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
                     return Text(snapshot.data.toString());

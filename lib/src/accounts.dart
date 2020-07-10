@@ -10,7 +10,6 @@ class Accounts {
   /// Returns the `userId` of the created user.
   static Future<MeteorClientLoginResult> createUser(String username,
       String email, String password, Map<String, String> profile) async {
-    Completer completer = Completer<MeteorClientLoginResult>();
     if (Meteor.isConnected) {
       var map = {
         'username': username,
@@ -22,14 +21,12 @@ class Accounts {
         var result = await Meteor().call('createUser', [map]);
         if (Meteor.showDebug) print(result);
         //Handle result
-        Meteor().notifyLoginResult(result, completer);
+        return Meteor().notifyLoginResult(result);
       } catch (error) {
-        Meteor().handleLoginError(error, completer);
+        return Meteor().handleLoginError(error);
       }
-    } else {
-      completer.completeError('Not connected to server');
     }
-    return completer.future;
+    throw 'Not connected to server';
   }
 
   /// Change the user account password provided the user is already logged in.
