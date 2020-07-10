@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:math';
 
-const debug = true;
-
 enum DdpConnectionStatusValues {
   connected,
   connecting,
@@ -73,6 +71,7 @@ class OnReconnectionCallback {
 }
 
 class DdpClient {
+  static bool showDebug = true;
   final int PING_SEC_INTERVAL = 20;
   final int PONG_WITHIN_SEC = 5;
   final Random _random = Random.secure();
@@ -110,7 +109,7 @@ class DdpClient {
   }
 
   printDebug(String str) {
-    if (debug) {
+    if (showDebug) {
       print('DDP[${_socket.hashCode}] - ${DateTime.now()}');
       print('DDP[${_socket.hashCode}] - $str');
     }

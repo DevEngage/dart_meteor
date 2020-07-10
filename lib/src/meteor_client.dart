@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_meteor/src/utils.dart';
 import 'package:rxdart/rxdart.dart';
 import 'ddp_client.dart';
 
@@ -48,7 +49,12 @@ stack: $stack
   }
 }
 
-class MeteorClient {
+class Meteor {
+  static final Meteor _singleton = Meteor._internal();
+  factory Meteor() {
+    return _singleton;
+  }
+  Meteor._internal();
   DdpClient connection;
 
   BehaviorSubject<DdpConnectionStatus> _statusSubject = BehaviorSubject();
@@ -75,12 +81,12 @@ class MeteorClient {
   Map<String, BehaviorSubject<Map<String, dynamic>>> _collectionsSubject = {};
   Map<String, Stream<Map<String, dynamic>>> collections = {};
 
-  MeteorClient.connect({String url}) {
+  Meteor.connect({String url}) {
     url = url.replaceFirst(RegExp(r'^http'), 'ws');
     if (!url.endsWith('websocket')) {
       url = url.replaceFirst(RegExp(r'/$'), '') + '/websocket';
     }
-    print('connecting to $url');
+    if (Meteor.showDebug) print('connecting to $url');
     connection = DdpClient(url: url);
 
     connection.status().listen((ddpStatus) {
@@ -97,6 +103,8 @@ class MeteorClient {
     _loggingInStream = _loggingInSubject.stream;
     _userIdStream = _userIdSubject.stream;
     _userStream = _userSubject.stream;
+
+    isConnected = true;
 
     prepareCollection('users');
 
@@ -143,6 +151,7 @@ class MeteorClient {
 
       _collectionsSubject[collectionName].add(_collections[collectionName]);
       if (collectionName == 'users' && id == _userId) {
+        Meteor.user = _collections['users'][_userId];
         _userSubject.add(_collections['users'][_userId]);
       }
     })
@@ -150,7 +159,7 @@ class MeteorClient {
       ..onDone(() {});
 
     connection.onReconnect((OnReconnectionCallback reconnectionCallback) {
-      print('connection.onReconnect()');
+      if (Meteor.showDebug) print('connection.onReconnect()');
       _loginWithExistingToken().catchError((error) {});
     });
 
@@ -168,7 +177,7 @@ class MeteorClient {
       }
     });
 
-    userId().listen((userId) {
+    userIdStream().listen((userId) {
       _userSubject.add(_collections['users'][userId]);
     });
   }
@@ -187,28 +196,34 @@ class MeteorClient {
   // ===========================================================
   // Core
 
+  /// A boolean to check the connection status.
+  static bool isConnected = false;
+  static Map<String, dynamic> user;
+  static String userId;
+  static bool showDebug = true;
+
   /// Boolean variable. True if running in client environment.
-  bool isClient() {
+  static bool isClient() {
     return true;
   }
 
   /// Boolean variable. True if running in server environment.
-  bool isServer() {
+  static bool isServer() {
     return false;
   }
 
   /// Boolean variable. True if running in a Cordova mobile environment.
-  bool isCordova() {
+  static bool isCordova() {
     return false;
   }
 
   /// Boolean variable. True if running in development environment.
-  bool isDevelopment() {
+  static bool isDevelopment() {
     return !bool.fromEnvironment("dart.vm.product");
   }
 
   /// Boolean variable. True if running in production environment.
-  bool isProduction() {
+  static bool isProduction() {
     return bool.fromEnvironment("dart.vm.product");
   }
 
@@ -306,7 +321,7 @@ class MeteorClient {
   // Accounts
 
   /// Get the current user record, or null if no user is logged in. A reactive data source.
-  Stream<Map<String, dynamic>> user() {
+  Stream<Map<String, dynamic>> userStream() {
     return _userStream;
   }
 
@@ -315,7 +330,7 @@ class MeteorClient {
   }
 
   /// Get the current user id, or null if no user is logged in. A reactive data source.
-  Stream<String> userId() {
+  Stream<String> userIdStream() {
     return _userIdStream;
   }
 
@@ -332,114 +347,39 @@ class MeteorClient {
     return _loggingInStream;
   }
 
-  /// Log the user out.
-  Future logout() {
-    Completer completer = Completer();
-    call('logout', []).then((result) {
-      _userId = null;
-      _token = null;
-      _tokenExpires = null;
-      _loggingIn = false;
-      _loggingInSubject.add(_loggingIn);
-      _userIdSubject.add(_userId);
-      completer.complete();
-    }).catchError((error) {
-      _userId = null;
-      _token = null;
-      _tokenExpires = null;
-      _loggingIn = false;
-      _loggingInSubject.add(_loggingIn);
-      _userIdSubject.add(_userId);
-      connection.disconnect();
-      Future.delayed(Duration(seconds: 2), () {
-        connection.reconnect();
-      });
-      completer.completeError(error);
-    });
-    return completer.future;
-  }
-
-  /// Log out other clients logged in as the current user, but does not log out the client that calls this function.
-  Future logoutOtherClients() {
-    Completer<String> completer = Completer();
-    call('getNewToken', []).then((result) {
-      _userId = result['id'];
-      _token = result['token'];
-      _tokenExpires =
-          DateTime.fromMillisecondsSinceEpoch(result['tokenExpires']['\$date']);
-      _loggingIn = false;
-      _loggingInSubject.add(_loggingIn);
-      _userIdSubject.add(_userId);
-      return call('removeOtherTokens', []);
-    }).catchError((error) {
-      completer.completeError(error);
-    });
-    return completer.future;
-  }
-
-  /// Log the user in with a password.
-  ///
-  /// [user]
-  /// Either a string interpreted as a username or an email;
-  /// or an object with a single key: email, username or id.
-  /// Username or email match in a case insensitive manner.
-  ///
-  /// [password] password
-  ///
-  /// [delayOnLoginErrorSecond]
-  /// If login errors, delay for specificed second before throw an error.
-  /// The user's password.
-  Future<MeteorClientLoginResult> loginWithPassword(
-      String user, String password,
-      {int delayOnLoginErrorSecond = 0}) {
-    Completer<MeteorClientLoginResult> completer = Completer();
-    _loggingIn = true;
+  /// Used internally to notify the future about success/failure of login process.
+  void handleLoginError(dynamic error, Completer completer) async {
+    _userId = null;
+    Meteor.userId = _userId;
+    _token = null;
+    _tokenExpires = null;
+    _loggingIn = false;
     _loggingInSubject.add(_loggingIn);
+    _userIdSubject.add(_userId);
+    completer.completeError(error);
+  }
 
-    var selector;
-    if (!user.contains('@')) {
-      selector = {'username': user};
-    } else {
-      selector = {'email': user};
-    }
-
-    call('login', [
-      {
-        'user': selector,
-        'password': {
-          'digest': sha256.convert(utf8.encode(password)).toString(),
-          'algorithm': 'sha-256'
-        },
-      }
-    ]).then((result) {
-      _userId = result['id'];
-      _token = result['token'];
-      _tokenExpires =
-          DateTime.fromMillisecondsSinceEpoch(result['tokenExpires']['\$date']);
-      _loggingIn = false;
-      _loggingInSubject.add(_loggingIn);
-      _userIdSubject.add(_userId);
-      completer.complete(MeteorClientLoginResult(
-        userId: _userId,
-        token: _token,
-        tokenExpires: _tokenExpires,
-      ));
-    }).catchError((error) {
-      Future.delayed(Duration(seconds: delayOnLoginErrorSecond), () {
-        _userId = null;
-        _token = null;
-        _tokenExpires = null;
-        _loggingIn = false;
-        _loggingInSubject.add(_loggingIn);
-        _userIdSubject.add(_userId);
-        completer.completeError(error);
-      });
-    });
-    return completer.future;
+  void notifyLoginResult(dynamic result, Completer completer) async {
+    _userId = result['id'];
+    Meteor.userId = _userId;
+    _token = await Utils.setString('token', result['token']);
+    _tokenExpires =
+        DateTime.fromMillisecondsSinceEpoch(result['tokenExpires']['\$date']);
+    _loggingIn = false;
+    _loggingInSubject.add(_loggingIn);
+    _userIdSubject.add(_userId);
+    completer.complete(MeteorClientLoginResult(
+      userId: _userId,
+      token: _token,
+      tokenExpires: _tokenExpires,
+    ));
   }
 
   Future<MeteorClientLoginResult> loginWithToken(
       {String token, DateTime tokenExpires}) {
+    if (!isConnected) {
+      throw 'Not connected to server';
+    }
     _token = token;
     if (tokenExpires == null) {
       _tokenExpires = DateTime.now().add(Duration(hours: 1));
@@ -449,46 +389,24 @@ class MeteorClient {
     return _loginWithExistingToken();
   }
 
-  Future<MeteorClientLoginResult> _loginWithExistingToken() {
+  Future<MeteorClientLoginResult> _loginWithExistingToken() async {
     Completer<MeteorClientLoginResult> completer = Completer();
-    print('Trying to login with existing token...');
-    print('Token is ${_token}');
-    if (_tokenExpires != null) {
-      print('Token expires ${_tokenExpires.toString()}');
-      print('now is ${DateTime.now()}');
-      print(
-          'Token expires is after now ${_tokenExpires.isAfter(DateTime.now())}');
-    }
+    _loggingIn = true;
+    _loggingInSubject.add(_loggingIn);
 
     if (_token != null &&
         _tokenExpires != null &&
         _tokenExpires.isAfter(DateTime.now())) {
       _loggingIn = true;
       _loggingInSubject.add(_loggingIn);
-      call('login', [
-        {'resume': _token}
-      ]).then((result) {
-        _userId = result['id'];
-        _token = result['token'];
-        _tokenExpires = DateTime.fromMillisecondsSinceEpoch(
-            result['tokenExpires']['\$date']);
-        _loggingIn = false;
-        _loggingInSubject.add(_loggingIn);
-        _userIdSubject.add(_userId);
-        completer.complete(MeteorClientLoginResult(
-          userId: _userId,
-          token: _token,
-          tokenExpires: _tokenExpires,
-        ));
-      }).catchError((error) {
-        _userId = null;
-        _token = null;
-        _tokenExpires = null;
-        _loggingIn = false;
-        _loggingInSubject.add(_loggingIn);
-        _userIdSubject.add(_userId);
-        completer.completeError(error);
-      });
+      try {
+        var result = await call('login', [
+          {'resume': _token}
+        ]);
+        notifyLoginResult(result, completer);
+      } catch (error) {
+        handleLoginError(error, completer);
+      }
     } else {
       completer.complete(null);
     }
@@ -522,5 +440,177 @@ class MeteorClient {
   /// A new password for the user. This is not sent in plain text over the wire.
   Future<dynamic> resetPassword(String token, String newPassword) {
     return call("resetPassword", [token, newPassword]);
+  }
+
+/////////////
+  /// Login using the user's [email] or [username] and [password].
+  ///
+  /// Returns the `loginToken` after logging in.
+  Future<String> loginWithPassword(String user, String password) async {
+    Completer completer = Completer<String>();
+    _loggingIn = true;
+    _loggingInSubject.add(_loggingIn);
+    if (isConnected) {
+      var query;
+      if (!user.contains('@')) {
+        query = {'username': user};
+      } else {
+        query = {'email': user};
+      }
+      try {
+        var result = await call('login', [
+          {
+            'user': query,
+            'password': {
+              'digest': sha256.convert(utf8.encode(password)).toString(),
+              'algorithm': 'sha-256'
+            },
+          }
+        ]);
+        notifyLoginResult(result, completer);
+      } catch (error) {
+        handleLoginError(error, completer);
+      }
+      return completer.future;
+    }
+    completer.completeError('Not connected to server');
+    return completer.future;
+  }
+
+  /// Login or register a new user with de Google oAuth API
+  ///
+  /// [email] the email to register with. Must be fetched from the Google oAuth API
+  /// [userId] the unique Google userId. Must be fetched from the Google oAuth API
+  /// [authHeaders] the authHeaders from Google oAuth API for server side validation
+  /// Returns the `loginToken` after logging in.
+  Future<String> loginWithGoogle(
+      String email, String userId, Object authHeaders) async {
+    final bool googleLoginPlugin = true;
+    _loggingIn = true;
+    _loggingInSubject.add(_loggingIn);
+    Completer completer = Completer<String>();
+    if (isConnected) {
+      try {
+        var result = await call('login', [
+          {
+            'email': email,
+            'userId': userId,
+            'authHeaders': authHeaders,
+            'googleLoginPlugin': googleLoginPlugin
+          }
+        ]);
+        notifyLoginResult(result, completer);
+      } catch (error) {
+        handleLoginError(error, completer);
+      }
+      return completer.future;
+    }
+    completer.completeError('Not connected to server');
+    return completer.future;
+  }
+
+  ///Login or register a new user with the Facebook Login API
+  ///
+  /// [userId] the unique Facebook userId. Must be fetched from the Facebook Login API
+  /// [token] the token from Facebook API Login for server side validation
+  /// Returns the `loginToken` after logging in.
+  Future<String> loginWithFacebook(String userId, String token) async {
+    final bool facebookLoginPlugin = true;
+    Completer completer = Completer<String>();
+    _loggingIn = true;
+    _loggingInSubject.add(_loggingIn);
+    if (isConnected) {
+      try {
+        var result = await call('login', [
+          {
+            'userId': userId,
+            'token': token,
+            'facebookLoginPlugin': facebookLoginPlugin
+          }
+        ]);
+        notifyLoginResult(result, completer);
+      } catch (error) {
+        handleLoginError(error, completer);
+      }
+      return completer.future;
+    }
+    completer.completeError('Not connected to server');
+    return completer.future;
+  }
+
+  ///Login or register a new user with the Apple Login API
+  ///
+  /// [userId] the unique Apple userId. Must be fetched from the Apple Login API
+  /// [jwt] the jwt from Apple API Login to get user's e-mail. (result.credential.identityToken)
+  /// [givenName] user's given name. Must be fetched from the Apple Login API
+  /// [lastName] user's last name. Must be fetched from the Apple Login API
+  /// Returns the `loginToken` after logging in.
+  Future<String> loginWithApple(
+      String userId, List<int> jwt, String givenName, String lastName) async {
+    final bool appleLoginPlugin = true;
+    Completer completer = Completer<String>();
+    _loggingIn = true;
+    _loggingInSubject.add(_loggingIn);
+    if (isConnected) {
+      var token = Utils.parseJwt(utf8.decode(jwt));
+      try {
+        var result = await call('login', [
+          {
+            'userId': userId,
+            'email': token['email'],
+            'givenName': givenName,
+            'lastName': lastName,
+            'appleLoginPlugin': appleLoginPlugin
+          }
+        ]);
+        notifyLoginResult(result, completer);
+      } catch (error) {
+        handleLoginError(error, completer);
+      }
+      return completer.future;
+    }
+    completer.completeError('Not connected to server');
+    return completer.future;
+  }
+
+  /// Logs out the user.
+  void logout() async {
+    if (isConnected) {
+      var result = await call('logout', []);
+      _userId = null;
+      Meteor.userId = null;
+      Meteor.user = null;
+      _token = null;
+      _tokenExpires = null;
+      _loggingIn = false;
+      _loggingInSubject.add(_loggingIn);
+      _userIdSubject.add(_userId);
+      await Utils.remove('loginToken');
+      // _sessionToken = null;
+    }
+  }
+
+  /// Log out other clients logged in as the current user, but does not log out the client that calls this function.
+  Future logoutOtherClients() {
+    Completer<String> completer = Completer();
+    call('getNewToken', []).then((result) {
+      _userId = result['id'];
+      Meteor.userId = _userId;
+      _token = result['token'];
+      _tokenExpires =
+          DateTime.fromMillisecondsSinceEpoch(result['tokenExpires']['\$date']);
+      _loggingIn = false;
+      _loggingInSubject.add(_loggingIn);
+      _userIdSubject.add(_userId);
+      return call('removeOtherTokens', []);
+    }).catchError((error) {
+      completer.completeError(error);
+    });
+    return completer.future;
+  }
+
+  /// Used internally to notify a future about the error returned from a ddp call.
+  void _notifyError(Completer completer, dynamic result) {
+    completer.completeError(result['reason']);
   }
 }

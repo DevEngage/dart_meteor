@@ -1,27 +1,27 @@
 import 'dart:async';
 
-import 'package:dart_meteor/dart_meteor.dart';
+import 'package:flutter_meteor/flutter_meteor.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('Environment', () {
-    MeteorClient meteor = MeteorClient.connect(url: 'ws://127.0.0.1:3000');
+    Meteor meteor = Meteor.connect(url: 'ws://127.0.0.1:3000');
 
     test('meteor.isClient', () {
-      expect(meteor.isClient(), isTrue);
+      expect(Meteor.isClient(), isTrue);
     });
 
     test('meteor.isServer', () {
-      expect(meteor.isServer(), isFalse);
+      expect(Meteor.isServer(), isFalse);
     });
 
     test('meteor.isCordova', () {
-      expect(meteor.isCordova(), isFalse);
+      expect(Meteor.isCordova(), isFalse);
     });
   });
 
   group('MeteorError', () {
-    MeteorClient meteor = MeteorClient.connect(url: 'ws://127.0.0.1:3000');
+    Meteor meteor = Meteor.connect(url: 'ws://127.0.0.1:3000');
 
     setUp(() async {
       meteor.reconnect();
@@ -52,7 +52,7 @@ void main() {
   });
 
   group('Login', () {
-    MeteorClient meteor = MeteorClient.connect(url: 'ws://127.0.0.1:3000');
+    Meteor meteor = Meteor.connect(url: 'ws://127.0.0.1:3000');
 
     setUp(() async {
       meteor.reconnect();
@@ -67,7 +67,7 @@ void main() {
       MeteorClientLoginResult result =
           await meteor.loginWithPassword('user1', 'password1');
       print('MeteorClientLoginResult: ' + result.toString());
-      expect(meteor.userId(), isNotNull);
+      expect(meteor.userIdStream(), isNotNull);
     });
 
     test('meteor.subscribe with onReady', () async {

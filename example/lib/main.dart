@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:dart_meteor/dart_meteor.dart';
+import 'package:flutter_meteor/flutter_meteor.dart';
 
-MeteorClient meteor = MeteorClient.connect(url: 'https://yourdomain.com');
+Meteor meteor = Meteor.connect(url: 'https://yourdomain.com');
 void main() => runApp(MyApp());
 
 class MyApp extends StatefulWidget {
@@ -70,7 +70,7 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               StreamBuilder(
-                  stream: meteor.userId(),
+                  stream: meteor.userIdStream(),
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       return RaisedButton(

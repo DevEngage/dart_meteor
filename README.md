@@ -12,13 +12,13 @@ I just publish a post on Medium showing how to handle connection status, user au
 
 A simple usage example:
 
-First, create an instance of MeteorClient in your app global scope so that it can be used anywhere in your project.
+First, create an instance of Meteor in your app global scope so that it can be used anywhere in your project.
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:dart_meteor/dart_meteor.dart';
 
-MeteorClient meteor = MeteorClient.connect(url: 'https://yourdomain.com');
+Meteor meteor = Meteor.connect(url: 'https://yourdomain.com');
 void main() => runApp(MyApp());
 ```
 
@@ -91,7 +91,7 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               StreamBuilder(
-                  stream: meteor.userId(),
+                  stream: meteor.userIdStream(),
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       return RaisedButton(
@@ -153,6 +153,7 @@ meteor.call('helloMethod', []).then((result) {
 You can found an example project inside [/example][example].
 
 ## Collections & Subscriptions
+
 Prepare your collections before use. You can use `prepareCollection` method in `initState()` or in your `main` function.
 
 ```dart
