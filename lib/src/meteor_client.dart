@@ -81,7 +81,9 @@ class Meteor {
   Map<String, BehaviorSubject<Map<String, dynamic>>> _collectionsSubject = {};
   Map<String, Stream<Map<String, dynamic>>> collections = {};
 
-  Meteor.connect({String url}) {
+  Meteor.connect({String url, reconnect = true, debug = false}) {
+    Meteor.showDebug = debug;
+    DdpClient.showDebug = debug;
     url = url.replaceFirst(RegExp(r'^http'), 'ws');
     if (!url.endsWith('websocket')) {
       url = url.replaceFirst(RegExp(r'/$'), '') + '/websocket';
@@ -180,6 +182,8 @@ class Meteor {
     userIdStream().listen((userId) {
       _userSubject.add(_collections['users'][userId]);
     });
+
+    reconnectUserWithToken();
   }
 
   /// To make sure that the stream is not null when accessing them through `collections`
@@ -362,7 +366,8 @@ class Meteor {
   void notifyLoginResult(dynamic result, Completer completer) async {
     _userId = result['id'];
     Meteor.userId = _userId;
-    _token = await Utils.setString('token', result['token']);
+    _token = result['token'];
+    await Utils.setString('token', result['token']);
     _tokenExpires =
         DateTime.fromMillisecondsSinceEpoch(result['tokenExpires']['\$date']);
     _loggingIn = false;
@@ -387,6 +392,13 @@ class Meteor {
       _tokenExpires = tokenExpires;
     }
     return _loginWithExistingToken();
+  }
+
+  reconnectUserWithToken() async {
+    final token = await Utils.getString('token');
+    if (Meteor.userId != null || token == null) return;
+    if (Meteor.showDebug) print('reconnecting UserWithToken');
+    return loginWithToken(token: token);
   }
 
   Future<MeteorClientLoginResult> _loginWithExistingToken() async {
@@ -446,8 +458,9 @@ class Meteor {
   /// Login using the user's [email] or [username] and [password].
   ///
   /// Returns the `loginToken` after logging in.
-  Future<String> loginWithPassword(String user, String password) async {
-    Completer completer = Completer<String>();
+  Future<MeteorClientLoginResult> loginWithPassword(
+      String user, String password) async {
+    Completer completer = Completer<MeteorClientLoginResult>();
     _loggingIn = true;
     _loggingInSubject.add(_loggingIn);
     if (isConnected) {
@@ -483,12 +496,12 @@ class Meteor {
   /// [userId] the unique Google userId. Must be fetched from the Google oAuth API
   /// [authHeaders] the authHeaders from Google oAuth API for server side validation
   /// Returns the `loginToken` after logging in.
-  Future<String> loginWithGoogle(
+  Future<MeteorClientLoginResult> loginWithGoogle(
       String email, String userId, Object authHeaders) async {
     final bool googleLoginPlugin = true;
     _loggingIn = true;
     _loggingInSubject.add(_loggingIn);
-    Completer completer = Completer<String>();
+    Completer completer = Completer<MeteorClientLoginResult>();
     if (isConnected) {
       try {
         var result = await call('login', [
@@ -514,9 +527,10 @@ class Meteor {
   /// [userId] the unique Facebook userId. Must be fetched from the Facebook Login API
   /// [token] the token from Facebook API Login for server side validation
   /// Returns the `loginToken` after logging in.
-  Future<String> loginWithFacebook(String userId, String token) async {
+  Future<MeteorClientLoginResult> loginWithFacebook(
+      String userId, String token) async {
     final bool facebookLoginPlugin = true;
-    Completer completer = Completer<String>();
+    Completer completer = Completer<MeteorClientLoginResult>();
     _loggingIn = true;
     _loggingInSubject.add(_loggingIn);
     if (isConnected) {
@@ -545,10 +559,10 @@ class Meteor {
   /// [givenName] user's given name. Must be fetched from the Apple Login API
   /// [lastName] user's last name. Must be fetched from the Apple Login API
   /// Returns the `loginToken` after logging in.
-  Future<String> loginWithApple(
+  Future<MeteorClientLoginResult> loginWithApple(
       String userId, List<int> jwt, String givenName, String lastName) async {
     final bool appleLoginPlugin = true;
-    Completer completer = Completer<String>();
+    Completer completer = Completer<MeteorClientLoginResult>();
     _loggingIn = true;
     _loggingInSubject.add(_loggingIn);
     if (isConnected) {

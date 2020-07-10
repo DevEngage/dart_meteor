@@ -71,7 +71,7 @@ class OnReconnectionCallback {
 }
 
 class DdpClient {
-  static bool showDebug = true;
+  static bool showDebug = false;
   final int PING_SEC_INTERVAL = 20;
   final int PONG_WITHIN_SEC = 5;
   final Random _random = Random.secure();

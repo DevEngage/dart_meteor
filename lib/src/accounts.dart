@@ -11,9 +11,9 @@ class Accounts {
   /// Creates a new user using [username], [email], [password] and a [profile] map.
   ///
   /// Returns the `userId` of the created user.
-  static Future<String> createUser(String username, String email,
-      String password, Map<String, String> profile) async {
-    Completer completer = Completer<String>();
+  static Future<MeteorClientLoginResult> createUser(String username,
+      String email, String password, Map<String, String> profile) async {
+    Completer completer = Completer<MeteorClientLoginResult>();
     if (Meteor.isConnected) {
       var map = {
         'username': username,
