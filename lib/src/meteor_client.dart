@@ -367,7 +367,8 @@ class Meteor {
     _loggingIn = false;
     _loggingInSubject.add(_loggingIn);
     _userIdSubject.add(_userId);
-    return null;
+    throw error;
+    // return null;
   }
 
   Future<MeteorClientLoginResult> notifyLoginResult(dynamic result) async {
