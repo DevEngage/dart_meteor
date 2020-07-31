@@ -423,7 +423,7 @@ class Meteor {
         ]);
         return await notifyLoginResult(result);
       } catch (error) {
-        return await handleLoginError(error);
+        return null;
       }
     }
     return null;
